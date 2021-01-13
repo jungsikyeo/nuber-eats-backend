@@ -80,7 +80,7 @@ export class UsersResolver {
       await this.usersService.editProfile(authUser.id, editProfileInput);
       return {
         ok: true,
-      }
+      };
     } catch (error) {
       return {
         ok: false,
