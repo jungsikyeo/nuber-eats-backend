@@ -48,6 +48,7 @@ import { RestaurantsModule } from './restaurants/restaurants.module';
       database: process.env.DB_NAME,
       synchronize: process.env.NODE_ENV !== 'prod',
       logging: process.env.NODE_ENV !== 'prod',
+      ssl: { rejectUnauthorized: false },
       entities: [User, Verification, Restaurant, Category],
     }),
     GraphQLModule.forRoot({
