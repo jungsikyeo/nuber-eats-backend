@@ -52,6 +52,7 @@ import { RestaurantsModule } from './restaurants/restaurants.module';
       entities: [User, Verification, Restaurant, Category],
     }),
     GraphQLModule.forRoot({
+      playground: process.env.NODE_ENV !== 'prod',
       autoSchemaFile: true,
       context: ({ req }) => ({ user: req['user'] }),
     }),
