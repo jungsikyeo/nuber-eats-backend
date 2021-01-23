@@ -42,7 +42,7 @@ import { RestaurantsModule } from './restaurants/restaurants.module';
     TypeOrmModule.forRoot({
       type: 'postgres',
       ...(process.env.DATABASE_URL
-        ? { url: process.env.DATABASE_URL }
+        ? { url: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } }
         : {
             host: process.env.DB_HOST,
             port: +process.env.DB_PORT,
@@ -52,7 +52,6 @@ import { RestaurantsModule } from './restaurants/restaurants.module';
           }),
       synchronize: process.env.NODE_ENV !== 'prod',
       logging: process.env.NODE_ENV !== 'prod',
-      ssl: { rejectUnauthorized: false },
       entities: [User, Verification, Restaurant, Category],
     }),
     GraphQLModule.forRoot({
