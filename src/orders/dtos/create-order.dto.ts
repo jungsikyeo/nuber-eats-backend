@@ -8,14 +8,17 @@ class CreateOrderItemInput {
   @Field((type) => Int)
   dishId: number;
 
-  @Field((type) => OrderItemOption, { nullable: true })
+  @Field((type) => [OrderItemOption], { nullable: true })
   options?: OrderItemOption[];
 }
 
 @InputType()
-export class CreateOrderInput extends PickType(Order, ['items']) {
+export class CreateOrderInput {
   @Field((type) => Int)
   restaurantId: number;
+
+  @Field((type) => [CreateOrderItemInput])
+  items: CreateOrderItemInput[];
 }
 
 @ObjectType()
