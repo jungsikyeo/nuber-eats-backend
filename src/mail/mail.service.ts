@@ -17,30 +17,31 @@ export class MailService {
   ) {
     const form = new formData();
     form.append('from', `YJS from Nuber Eats <mailgun@${this.options.domain}>`);
-    form.append('to', 'mdotcom12@naver.com');
+    form.append('to', 'ssamzhang@kakao.com');
     form.append('subject', subject);
     form.append('template', template);
     emailVars.forEach((eVar) => form.append(`v:${eVar.key}`, eVar.value));
     try {
-      await got(`https://api.mailgun.net/v3/${this.options.domain}/messages/`, {
-        https: {
-          rejectUnauthorized: false,
+      const response = await got(
+        `https://api.mailgun.net/v3/${this.options.domain}/messages`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Basic ${Buffer.from(
+              `api:${this.options.apiKey}`,
+            ).toString('base64')}`,
+          },
+          body: form,
         },
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${Buffer.from(
-            `api:${this.options.apiKey}`,
-          ).toString('base64')}`,
-        },
-        body: form,
-      });
+      );
+      console.log(response.body);
     } catch (error) {
       console.log(error);
     }
   }
 
   sendVerificationEmail(email: string, code: string) {
-    this.sendEmail('Verify Your Email', 'verify-email', [
+    this.sendEmail('Verify Your Email', 'yjs-nuber-eats-account-v1', [
       { key: 'code', value: code },
       { key: 'username', value: email },
     ]);
