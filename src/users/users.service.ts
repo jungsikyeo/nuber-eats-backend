@@ -1,18 +1,20 @@
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { User } from './entities/user.entity';
 import { Repository } from 'typeorm';
 import {
   CreateAccountInput,
   CreateAccountOutput,
 } from './dtos/create-account.dto';
 import { LoginInput, LoginOutput } from './dtos/login.dto';
-import { JwtService } from '../jwt/jwt.service';
+import { User } from './entities/user.entity';
+import { JwtService } from 'src/jwt/jwt.service';
 import { EditProfileInput, EditProfileOutput } from './dtos/edit-profile.dto';
 import { Verification } from './entities/verification.entity';
-import { UserProfileOutput } from './dtos/user-profile.dto';
 import { VerifyEmailOutput } from './dtos/verify-email.dto';
-import { MailService } from '../mail/mail.service';
+import { UserProfileOutput } from './dtos/user-profile.dto';
+import { MailService } from 'src/mail/mail.service';
 
+@Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(User) private readonly users: Repository<User>,
@@ -43,7 +45,7 @@ export class UsersService {
       this.mailService.sendVerificationEmail(user.email, verification.code);
       return { ok: true };
     } catch (e) {
-      return { ok: false, error: 'Could not create account' };
+      return { ok: false, error: "Couldn't create account" };
     }
   }
 
@@ -75,23 +77,20 @@ export class UsersService {
     } catch (error) {
       return {
         ok: false,
-        error: 'Can`t log user in.',
+        error: "Can't log user in.",
       };
     }
   }
 
   async findById(id: number): Promise<UserProfileOutput> {
     try {
-      const user = await this.users.findOne({ id });
+      const user = await this.users.findOneOrFail({ id });
       return {
         ok: true,
         user,
       };
-    } catch (e) {
-      return {
-        error: 'User Not Found',
-        ok: false,
-      };
+    } catch (error) {
+      return { ok: false, error: 'User Not Found' };
     }
   }
 
@@ -113,15 +112,12 @@ export class UsersService {
       if (password) {
         user.password = password;
       }
-      this.users.save(user);
+      await this.users.save(user);
       return {
         ok: true,
       };
     } catch (error) {
-      return {
-        ok: false,
-        error: 'Could not update profile.',
-      };
+      return { ok: false, error: 'Could not update profile.' };
     }
   }
 
@@ -135,16 +131,11 @@ export class UsersService {
         verification.user.verified = true;
         await this.users.save(verification.user);
         await this.verifications.delete(verification.id);
-        return {
-          ok: true,
-        };
+        return { ok: true };
       }
       return { ok: false, error: 'Verification not found.' };
     } catch (error) {
-      return {
-        ok: false,
-        error: 'Could not verify email.',
-      };
+      return { ok: false, error: 'Could not verify email.' };
     }
   }
 }

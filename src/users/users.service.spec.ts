@@ -1,255 +1,78 @@
-import { UsersService } from './users.service';
 import { Test } from '@nestjs/testing';
-import { Repository } from 'typeorm';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { JwtService } from 'src/jwt/jwt.service';
-import { User, UserRole } from './entities/user.entity';
-import { Verification } from './entities/verification.entity';
-import { MailService } from '../mail/mail.service';
+import got from 'got';
+import * as FormData from 'form-data';
+import { CONFIG_OPTIONS } from 'src/common/common.constants';
+import { MailService } from 'src/mail/mail.service';
 
-const mockRepository = {
-  findOne: jest.fn(),
-  save: jest.fn(),
-  create: jest.fn(),
-  findOneOrFail: jest.fn(),
-  delete: jest.fn(),
-};
+jest.mock('got');
+jest.mock('form-data');
 
-const mockJwtService = {
-  sign: jest.fn(() => 'signed-token-baby'),
-  verify: jest.fn(),
-};
+const TEST_DOMAIN = 'test-domain';
 
-const mockMailService = {
-  sendVerificationEmail: jest.fn(),
-};
-
-type MockRepository<T = any> = Partial<Record<keyof Repository<T>, jest.Mock>>;
-
-describe('UsersService', () => {
-  let service: UsersService;
-  let userRepository: MockRepository<User>;
-  let verificationRepository: MockRepository<Verification>;
-  let mailService: MailService;
-  let jwtService: JwtService;
+describe('MailService', () => {
+  let service: MailService;
 
   beforeEach(async () => {
     const module = await Test.createTestingModule({
       providers: [
-        UsersService,
+        MailService,
         {
-          provide: getRepositoryToken(User),
-          useValue: mockRepository,
-        },
-        {
-          provide: getRepositoryToken(Verification),
-          useValue: mockRepository,
-        },
-        {
-          provide: JwtService,
-          useValue: mockJwtService,
-        },
-        {
-          provide: MailService,
-          useValue: mockMailService,
+          provide: CONFIG_OPTIONS,
+          useValue: {
+            apiKey: 'test-apiKey',
+            domain: TEST_DOMAIN,
+            fromEmail: 'test-fromEmail',
+          },
         },
       ],
     }).compile();
-
-    service = module.get<UsersService>(UsersService);
-    jwtService = module.get<JwtService>(JwtService);
-    userRepository = module.get(getRepositoryToken(User));
+    service = module.get<MailService>(MailService);
   });
 
   it('should be defined', () => {
     expect(service).toBeDefined();
   });
 
-  describe('createAccount', () => {
-    const createAccountArgs = {
-      email: 'aaa@aaa.com',
-      password: '1234',
-      role: UserRole.Client,
-    };
-
-    it('should fail if user exists', async () => {
-      userRepository.findOne.mockResolvedValue({
-        id: 1,
-        email: '',
-      });
-      const result = await service.createAccount(createAccountArgs);
-      expect(result).toMatchObject({
-        ok: false,
-        error: `There is a user with that email already`,
-      });
-    });
-
-    it('should create a new user', async () => {
-      userRepository.findOne.mockResolvedValue(undefined);
-      userRepository.create.mockReturnValue(createAccountArgs);
-
-      const result = await service.createAccount(createAccountArgs);
-
-      expect(userRepository.create).toHaveBeenCalledTimes(1);
-      expect(userRepository.create).toHaveBeenCalledWith(createAccountArgs);
-
-      expect(userRepository.save).toHaveBeenCalledTimes(1);
-      expect(userRepository.save).toHaveBeenCalledWith(createAccountArgs);
-      expect(result).toEqual({
-        ok: true,
-        error: null,
-      });
-    });
-
-    it('should fail on exception', async () => {
-      userRepository.findOne.mockRejectedValue(new Error());
-      const result = await service.createAccount(createAccountArgs);
-      expect(result).toEqual({ ok: false, error: 'Could not create account' });
+  describe('sendVerificationEmail', () => {
+    it('should call sendEmail', () => {
+      const sendVerificationEmailArgs = {
+        email: 'email',
+        code: 'code',
+      };
+      jest.spyOn(service, 'sendEmail').mockImplementation();
+      service.sendVerificationEmail(
+        sendVerificationEmailArgs.email,
+        sendVerificationEmailArgs.code,
+      );
+      expect(service.sendEmail).toHaveBeenCalledTimes(1);
+      expect(service.sendEmail).toHaveBeenCalledWith(
+        'Verify Your Email',
+        'verify-email',
+        [
+          { key: 'code', value: sendVerificationEmailArgs.code },
+          { key: 'username', value: sendVerificationEmailArgs.email },
+        ],
+      );
     });
   });
-
-  describe('login', () => {
-    const loginArgs = {
-      email: 'aaa@aaa.com',
-      password: '1234',
-    };
-    it('should fail if user does not exist', async () => {
-      userRepository.findOne.mockResolvedValue(null);
-
-      const result = await service.login(loginArgs);
-      expect(userRepository.findOne).toHaveBeenCalledTimes(4);
-      expect(userRepository.findOne).toHaveBeenCalledWith(
-        expect.any(Object),
+  describe('sendEmail', () => {
+    it('sends email', async () => {
+      const ok = await service.sendEmail('', '', []);
+      const formSpy = jest.spyOn(FormData.prototype, 'append');
+      expect(formSpy).toHaveBeenCalled();
+      expect(got.post).toHaveBeenCalledTimes(1);
+      expect(got.post).toHaveBeenCalledWith(
+        `https://api.mailgun.net/v3/${TEST_DOMAIN}/messages`,
         expect.any(Object),
       );
-      expect(result).toEqual({ ok: false, error: 'User not found' });
+      expect(ok).toEqual(true);
     });
-
-    it('should fail if the password is wrong', async () => {
-      const mockedUser = {
-        checkPassword: jest.fn(() => Promise.resolve(false)),
-      };
-      userRepository.findOne.mockResolvedValue(mockedUser);
-      const result = await service.login(loginArgs);
-      expect(result).toEqual({
-        ok: false,
-        error: 'Wrong password',
+    it('fails on error', async () => {
+      jest.spyOn(got, 'post').mockImplementation(() => {
+        throw new Error();
       });
-    });
-
-    it('sholud return token if password correct', async () => {
-      const mockedUser = {
-        id: 1,
-        checkPassword: jest.fn(() => Promise.resolve(true)),
-      };
-      userRepository.findOne.mockResolvedValue(mockedUser);
-      const result = await service.login(loginArgs);
-      expect(jwtService.sign).toHaveBeenCalledTimes(1);
-      expect(jwtService.sign).toHaveBeenCalledWith(expect.any(Number));
-      expect(result).toEqual({
-        ok: true,
-        token: 'signed-token-baby',
-      });
-    });
-
-    it('should fail on exception', async () => {
-      userRepository.findOne.mockRejectedValue(new Error());
-      const result = await service.login(loginArgs);
-      expect(result).toEqual({ ok: false, error: 'Can`t log user in.' });
-    });
-  });
-
-  describe('findById', () => {
-    const findByIdArgs = { id: 1 };
-    it('should find an existing user', async () => {
-      userRepository.findOneOrFail.mockResolvedValue(findByIdArgs);
-      const result = await service.findById(1);
-      expect(result).toEqual({ ok: true, user: findByIdArgs });
-    });
-
-    it('should fail if no user is found', async () => {
-      userRepository.findOneOrFail.mockRejectedValue(new Error());
-      const result = await service.findById(1);
-      expect(result).toEqual({ ok: false, error: 'User Not Found' });
-    });
-  });
-
-  describe('editProfile', () => {
-    it('should change email', async () => {
-      const oldUser = {
-        email: 'aaa@aaa.com',
-      };
-      const editProfileArgs = {
-        userId: 1,
-        input: { email: 'bbb@bbb.com' },
-      };
-      userRepository.findOne.mockResolvedValue(oldUser);
-      await service.editProfile(editProfileArgs.userId, editProfileArgs.input);
-      expect(userRepository.findOne).toHaveBeenCalledTimes(8);
-      expect(userRepository.findOne).toHaveBeenCalledWith(
-        editProfileArgs.userId,
-      );
-    });
-
-    it('should change password', async () => {
-      const editProfileArgs = {
-        userId: 1,
-        input: { password: 'new' },
-      };
-      userRepository.findOne.mockResolvedValue({ password: 'old' });
-      const result = await service.editProfile(
-        editProfileArgs.userId,
-        editProfileArgs.input,
-      );
-      expect(userRepository.save).toHaveBeenCalledTimes(3);
-      expect(userRepository.save).toHaveBeenCalledWith(editProfileArgs.input);
-      expect(result).toEqual({
-        ok: true,
-      });
-    });
-
-    it('should fail on exception', async () => {
-      userRepository.findOne.mockRejectedValue(new Error());
-      const result = await service.editProfile(1, { email: null });
-      expect(result).toEqual({ ok: false, error: 'Could not update profile' });
-    });
-  });
-
-  describe('verifyEmail', () => {
-    it('should verify email', async () => {
-      const mockedVerification = {
-        user: {
-          verified: true,
-        },
-        id: 1,
-      };
-      verificationRepository.findOne.mockRejectedValue(mockedVerification);
-
-      const result = await service.verifyEmail('');
-
-      expect(verificationRepository.findOne).toHaveBeenCalledTimes(1);
-      expect(verificationRepository.findOne).toHaveBeenCalledWith(
-        expect.any(Object),
-        expect.any(Object),
-      );
-      expect(userRepository.save).toHaveBeenCalledTimes(1);
-      expect(userRepository.save).toHaveBeenCalledWith({ verified: true });
-
-      expect(verificationRepository.delete).toHaveBeenCalledTimes(1);
-      expect(verificationRepository.delete).toHaveBeenCalledWith(
-        mockedVerification.id,
-      );
-      expect(result).toEqual({ ok: true });
-    });
-    it('should fail on verification not found', async () => {
-      verificationRepository.findOne.mockResolvedValue(undefined);
-      const result = await service.verifyEmail('');
-      expect(result).toEqual({ ok: false, error: 'Verification not found.' });
-    });
-    it('should fail on exception', async () => {
-      verificationRepository.findOne.mockRejectedValue(new Error());
-      const result = await service.verifyEmail('');
-      expect(result).toEqual({ ok: false, error: 'Could not verify email.' });
+      const ok = await service.sendEmail('', '', []);
+      expect(ok).toEqual(false);
     });
   });
 });
